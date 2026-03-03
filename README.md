@@ -39,4 +39,4 @@ _*Chris M. Perez*_
 
 ---
 
-Copyright ©2025 [FMCF Grammar](https://github.com/chrismichaelps/grammar).
+Copyright ©2026 [FMCF Grammar](https://github.com/chrismichaelps/grammar).
