@@ -93,6 +93,19 @@ const Fragment: ExoticComponent<{ children?: ReactNode }>
 // Activity (React 19.2+, index.d.ts L1986-2006)
 const Activity: ExoticComponent<ActivityProps>
 interface ActivityProps { mode?: "hidden" | "visible"; name?: string; children: ReactNode }
+
+// Top-level type utilities
+type ElementType<P = any> = { [K in Tag]: P extends IntrinsicElements[K] ? K : never }[Tag] | ComponentType<P>
+type ComponentType<P = {}> = ComponentClass<P> | FunctionComponent<P>
+type JSXElementConstructor<P> = ((props: P) => ReactNode | Promise<ReactNode>) | (new(props: P) => Component<any>)
+type ContextType<C extends Context<any>> = C extends Context<infer T> ? T : never
+interface ReactPortal extends ReactElement { children: ReactNode }
+
+// ReactPromise status tracking (index.d.ts L1938-1960)
+interface PendingReactPromise<T> extends PromiseLike<T> { status: "pending" }
+interface FulfilledReactPromise<T> extends PromiseLike<T> { status: "fulfilled"; value: T }
+interface RejectedReactPromise<T> extends PromiseLike<T> { status: "rejected"; reason: unknown }
+type ReactPromise<T> = UntrackedReactPromise<T> | PendingReactPromise<T> | FulfilledReactPromise<T> | RejectedReactPromise<T>
 ```
 
 ## [Core_Hooks]
@@ -149,6 +162,7 @@ function useDebugValue<T>(value: T, format?: (value: T) => any): void
 
 // Cache (index.d.ts L1978)
 function cache<CachedFunction extends Function>(fn: CachedFunction): CachedFunction
+function cacheSignal(): null | CacheSignal  // React 19.2: abort signal for cached computations
 ```
 
 ## [Event_System]
@@ -250,6 +264,22 @@ memo<P extends object>(Component: FC<P>, propsAreEqual?: (prev: Readonly<P>, nex
 lazy<T extends ComponentType<any>>(load: () => Promise<{ default: T }>): LazyExoticComponent<T>
 createRef<T>(): RefObject<T | null>
 
+// Element creation (index.d.ts L457-537)
+createElement(type: string | FunctionComponent | ComponentClass, props?: object | null, ...children: ReactNode[]): ReactElement
+cloneElement(element: ReactElement, props?: object, ...children: ReactNode[]): ReactElement
+isValidElement<P>(object: {} | null | undefined): object is ReactElement<P>
+
+// Children API (index.d.ts L724-733)
+Children.map<T, C>(children: C, fn: (child: C, index: number) => T): Array<T>
+Children.forEach<C>(children: C, fn: (child: C, index: number) => void): void
+Children.count(children: any): number
+Children.only<C>(children: C): C
+Children.toArray(children: ReactNode): Array<ReactNode>
+
+// Testing
+act(callback: () => void): void
+act<T>(callback: () => T | Promise<T>): Promise<T>
+
 // Type utilities
 ComponentProps<T>              // extract props from component or intrinsic element
 ComponentPropsWithRef<T>       // includes ref
@@ -264,3 +294,28 @@ namespace JSX {
   interface IntrinsicElements { div: DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>; ... }
 }
 ```
+
+## [Tactical_Patterns]
+### Server Components (React 19)
+- **Async Components**: `async function Page() { const data = await fetch(...); return <div>{data}</div> }` — no `useEffect` needed.
+- **"use client" Boundary**: Mark client components explicitly. Server Components are default.
+- **"use server" Actions**: Mark server functions for form actions: `async function submit(formData: FormData) { "use server"; ... }`.
+- **use() Hook**: `const data = use(promise)` — unwrap promises/context inside render. Works with Suspense.
+
+### Form Actions (React 19)
+- **useActionState**: `const [state, dispatch, isPending] = useActionState(action, initialState)` — progressive enhancement.
+- **useOptimistic**: `const [optimistic, addOptimistic] = useOptimistic(state)` — optimistic UI updates before server confirms.
+- **Form action prop**: `<form action={serverAction}>` — native form submission with server actions.
+
+### Performance Patterns
+- **Transition Updates**: `const [isPending, startTransition] = useTransition()` — mark non-urgent updates.
+- **Deferred Values**: `const deferred = useDeferredValue(value)` — deprioritize expensive re-renders.
+- **Memoization**: `memo()` for components, `useMemo()` for values, `useCallback()` for functions.
+- **Lazy Loading**: `const LazyComponent = lazy(() => import('./Component'))` — code splitting.
+
+### Ref Patterns (React 19)
+- **Ref Cleanup**: `ref={(node) => { setup(node); return () => cleanup(node) }}` — callback refs can return cleanup.
+- **Ref as Prop**: Function components accept `ref` directly in props (no `forwardRef` needed in React 19).
+
+### Context Patterns (React 19)
+- **Direct Provider**: `<ThemeContext value="dark">` — Context itself is the Provider (no `.Provider` needed).

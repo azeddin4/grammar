@@ -125,6 +125,40 @@ interface RouteGenericInterface {
 // Type Provider (types/type-provider.d.ts) — Zod/TypeBox integration
 interface FastifyTypeProvider { readonly input: unknown; readonly output: unknown }
 interface FastifyTypeProviderDefault extends FastifyTypeProvider { readonly output: this["input"] }
+
+// FastifyInstance — 5 generic parameters (types/instance.d.ts)
+interface FastifyInstance<
+  RawServer = RawServerDefault,
+  RawRequest = RawRequestDefaultExpression<RawServer>,
+  RawReply = RawReplyDefaultExpression<RawServer>,
+  Logger = FastifyBaseLogger,
+  TypeProvider = FastifyTypeProviderDefault
+> {
+  server: RawServer
+  pluginName: string
+  prefix: string
+  version: string
+  log: Logger
+  listeningOrigin: string
+  addresses(): AddressInfo[]
+  withTypeProvider<Provider extends FastifyTypeProvider>(): FastifyInstance<...Provider>  // switch type provider
+  initialConfig: Readonly<{ connectionTimeout?, keepAliveTimeout?, bodyLimit?, caseSensitive?, http2?, ... }>  // frozen initial config
+  supportedMethods: string[]  // list of HTTP methods
+}
+
+// FastifyListenOptions (types/instance.d.ts)
+interface FastifyListenOptions {
+  port?: number               // default: 0 (random)
+  host?: string               // default: localhost
+  path?: string               // IPC socket path
+  backlog?: number            // default: 511
+  exclusive?: boolean
+  readableAll?: boolean       // IPC pipe readable for all users
+  writableAll?: boolean       // IPC pipe writable for all users
+  ipv6Only?: boolean          // disable dual-stack
+  signal?: AbortSignal        // abort listener
+  listenTextResolver?: (address: string) => string
+}
 ```
 
 ## [Hooks_Lifecycle]
@@ -143,15 +177,16 @@ app.addHook("preSerialization", async (request, reply, payload) => { return modi
 app.addHook("onSend", async (request, reply, payload) => { return modifiedPayload })
 app.addHook("onResponse", async (request, reply) => {})
 app.addHook("onError", async (request, reply, error) => {})
-app.addHook("onTimeout", async (request, reply) => {})
+app.addHook("onTimeout", async (request, reply) => {})          // fires when connectionTimeout exceeded
+app.addHook("onRequestAbort", async (request) => {})            // fires when client closes connection early
 
 // Application lifecycle hooks
-app.addHook("onReady", async () => {})
-app.addHook("onListen", async () => {})
-app.addHook("onClose", async (instance) => {})
-app.addHook("preClose", async () => {})
-app.addHook("onRoute", (routeOptions) => {})   // sync
-app.addHook("onRegister", (instance, opts) => {}) // sync
+app.addHook("onReady", async () => {})          // before server starts listening
+app.addHook("onListen", async () => {})         // after server starts listening
+app.addHook("onClose", async (instance) => {})  // on server close
+app.addHook("preClose", async () => {})         // before close begins
+app.addHook("onRoute", (routeOptions) => {})    // sync — when route registered
+app.addHook("onRegister", (instance, opts) => {}) // sync — when plugin encapsulation context created
 ```
 
 ## [Architectural_Laws]
@@ -182,35 +217,115 @@ app.head<RouteGeneric>(url: string, opts?, handler): FastifyInstance
 app.options<RouteGeneric>(url: string, opts?, handler): FastifyInstance
 app.all<RouteGeneric>(url: string, opts?, handler): FastifyInstance
 app.route<RouteGeneric>(opts: RouteOptions): FastifyInstance
+// WebDAV methods: propfind, proppatch, mkcalendar, mkcol, copy, move, lock, unlock, trace, report, search
+
+// Route introspection
+app.hasRoute(opts: { method, url, constraints? }): boolean    // check if route exists
+app.findRoute(opts: { method, url, constraints? }): FindResult  // find route details
+app.printRoutes(opts?: PrintRoutesOptions): string            // radix tree visualization
+app.printPlugins(): string                                     // plugin tree visualization
+
+// Custom HTTP methods
+app.addHttpMethod(method: string, opts?: { hasBody: boolean }): FastifyInstance
+app.supportedMethods: string[]  // ['GET', 'HEAD', 'POST', ...]
 
 // Plugin registration (types/register.d.ts, types/plugin.d.ts)
-app.register(plugin: FastifyPluginAsync, opts?: FastifyRegisterOptions): FastifyInstance
-app.register(plugin: FastifyPluginCallback, opts?: FastifyRegisterOptions): FastifyInstance
+app.register(plugin: FastifyPluginAsync, opts?: FastifyRegisterOptions): FastifyInstance & SafePromiseLike
+app.register(plugin: FastifyPluginCallback, opts?: FastifyRegisterOptions): FastifyInstance & SafePromiseLike
+app.after(): FastifyInstance & SafePromiseLike  // execute after current plugin
+app.hasPlugin(name: string): boolean
 
-// Decorators (types/instance.d.ts)
-app.decorate(name: string, value: any): FastifyInstance
-app.decorateRequest(name: string, value: any): FastifyInstance
-app.decorateReply(name: string, value: any): FastifyInstance
-app.hasDecorator(name: string): boolean
-app.hasRequestDecorator(name: string): boolean
-app.hasReplyDecorator(name: string): boolean
+// Type Provider switching
+app.withTypeProvider<ZodTypeProvider>(): FastifyInstance<..., ZodTypeProvider>
+
+// Decorators (types/instance.d.ts) — type-safe with getter/setter pattern
+app.decorate<T>(name: string | symbol, value: T | { getter: () => T; setter?: (v: T) => void }, deps?: string[]): FastifyInstance
+app.decorateRequest<T>(name: string | symbol, value: T, deps?: string[]): FastifyInstance
+app.decorateReply<T>(name: string | symbol, value: T, deps?: string[]): FastifyInstance
+app.getDecorator<T>(name: string | symbol): T  // retrieve decorator value
+app.hasDecorator(name: string | symbol): boolean
+app.hasRequestDecorator(name: string | symbol): boolean
+app.hasReplyDecorator(name: string | symbol): boolean
 
 // Content type parser (types/content-type-parser.d.ts)
 app.addContentTypeParser(contentType: string | string[], opts, parser: (req, body, done) => void): void
 app.hasContentTypeParser(contentType: string): boolean
+app.removeContentTypeParser(contentType: string | string[] | RegExp): void
+app.removeAllContentTypeParsers(): void
+app.getDefaultJsonParser(onProtoAction, onConstructorAction): FastifyBodyParser
+app.defaultTextParser: FastifyBodyParser<string>
 
-// Error handling (types/errors.d.ts)
-app.setErrorHandler<TError extends Error>(handler: (error: TError, request: FastifyRequest, reply: FastifyReply) => void): FastifyInstance
-app.setNotFoundHandler(handler: (request: FastifyRequest, reply: FastifyReply) => void): FastifyInstance
-
-// Lifecycle
-app.listen(opts: FastifyListenOptions): Promise<string>
-app.ready(): Promise<FastifyInstance>
-app.close(): Promise<undefined>
-app.inject(opts): Promise<Response>  // for testing
-
-// Schema management (types/schema.d.ts)
+// Schema & Serialization (types/schema.d.ts)
 app.addSchema(schema: object): FastifyInstance
 app.getSchemas(): Record<string, object>
 app.getSchema(schemaId: string): object
+app.setValidatorCompiler<T>(compiler: FastifySchemaCompiler<T>): FastifyInstance
+app.setSerializerCompiler<T>(compiler: FastifySerializerCompiler<T>): FastifyInstance
+app.setSchemaController(opts: FastifySchemaControllerOptions): FastifyInstance
+app.setReplySerializer(fn: (payload: unknown, statusCode: number) => string): FastifyInstance
+app.setSchemaErrorFormatter(formatter: SchemaErrorFormatter): FastifyInstance
+app.validatorCompiler: FastifySchemaCompiler | undefined
+app.serializerCompiler: FastifySerializerCompiler | undefined
+
+// Error handling
+app.setErrorHandler<TError>(handler: (this: FastifyInstance, error: TError, request: FastifyRequest, reply: FastifyReply) => any): FastifyInstance
+app.setNotFoundHandler(handler: RouteHandlerMethod): FastifyInstance
+app.setNotFoundHandler(opts: { preValidation?, preHandler? }, handler: RouteHandlerMethod): FastifyInstance
+app.errorHandler: (error, request, reply) => void  // access default error handler
+
+// Request ID & Logging
+app.setGenReqId(fn: (req: RawRequest) => string): FastifyInstance
+app.childLoggerFactory: FastifyChildLoggerFactory
+app.setChildLoggerFactory(factory: FastifyChildLoggerFactory): FastifyInstance
+
+// Custom constraints
+app.addConstraintStrategy(strategy: ConstraintStrategy): void
+app.hasConstraintStrategy(name: string): boolean
+
+// Lifecycle
+app.listen(opts: FastifyListenOptions): Promise<string>
+app.listen(opts: FastifyListenOptions, callback: (err, address) => void): void
+app.ready(): FastifyInstance & SafePromiseLike<undefined>
+app.close(): Promise<undefined>
+app[Symbol.asyncDispose](): Promise<undefined>  // using declaration support
+app.inject(opts: InjectOptions | string): Promise<LightMyRequestResponse>  // for testing
+app.inject(): LightMyRequestChain  // chainable testing API
+app.routing(req, res): void  // manual routing
+```
+
+## [Tactical_Patterns]
+```ts
+// Type Provider with Zod
+import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod'
+const app = Fastify().withTypeProvider<ZodTypeProvider>()
+app.setValidatorCompiler(validatorCompiler)
+app.setSerializerCompiler(serializerCompiler)
+app.get('/users/:id', {
+  schema: { params: z.object({ id: z.string() }), response: { 200: z.object({ name: z.string() }) } }
+}, async (req) => ({ name: req.params.id }))  // fully typed
+
+// Plugin encapsulation with fastify-plugin
+import fp from 'fastify-plugin'
+export default fp(async (fastify, opts) => {
+  fastify.decorate('db', new Database())  // shared across encapsulation
+}, { name: 'db-plugin' })
+
+// Decorator getter/setter pattern
+app.decorateRequest('user', {
+  getter() { return this.headers['x-user'] },
+})
+
+// Route-level hooks via opts
+app.get('/protected', {
+  preHandler: async (req, reply) => { if (!req.headers.auth) reply.code(401).send() }
+}, handler)
+
+// Testing with inject()
+const response = await app.inject({ method: 'GET', url: '/users/1' })
+assert.equal(response.statusCode, 200)
+assert.deepStrictEqual(response.json(), { name: 'Alice' })
+
+// Route introspection
+console.log(app.printRoutes({ method: 'GET', includeMeta: true }))
+console.log(app.hasRoute({ method: 'GET', url: '/users/:id' }))
 ```

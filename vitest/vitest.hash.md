@@ -181,6 +181,34 @@ vi.stubGlobal(name: string, value: unknown): void
 vi.unstubAllGlobals(): void
 vi.stubEnv(name: string, value: string): void
 vi.unstubAllEnvs(): void
+
+// Hoisting (v2+)
+vi.hoisted<T>(() => T): T  // hoisted to top of file, runs before vi.mock()
+
+// Async wait utilities (v1+)
+vi.waitFor<T>(callback: () => T | Promise<T>, options?: { timeout?: number; interval?: number }): Promise<T>
+vi.waitUntil<T>(callback: () => T | Promise<T>, options?: { timeout?: number; interval?: number }): Promise<T>
+```
+
+## [Advanced_Testing]
+```ts
+// Polling assertions
+await expect.poll(async () => await fetchStatus(), { timeout: 5000, interval: 500 }).toBe("ready")
+
+// Test lifecycle events (per-test hooks)
+onTestFailed((result) => { /* runs when current test fails */ })
+onTestFinished((result) => { /* runs when current test completes (pass or fail) */ })
+
+// Test artifacts (v4+)
+recordArtifact("screenshot", { type: "file", path: "/path/to/file.png" })
+
+// Type-level testing (via expect-type)
+import { expectTypeOf } from "vitest"
+expectTypeOf<string>().toEqualTypeOf<string>()
+expectTypeOf(fn).parameter(0).toBeString()
+expectTypeOf(fn).returns.toBeVoid()
+expectTypeOf<{ a: string }>().toMatchTypeOf<{ a: string; b?: number }>()
+expectTypeOf<string>().not.toEqualTypeOf<number>()
 ```
 
 ## [Architectural_Laws]

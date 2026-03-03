@@ -145,4 +145,22 @@ class PrismaClientUnknownRequestError extends Error {}
 class PrismaClientRustPanicError extends Error {}
 class PrismaClientInitializationError extends Error { errorCode?: string }
 class PrismaClientValidationError extends Error {}
+
+// Sentinel types for JSON fields (runtime/client.d.ts)
+Prisma.DbNull     // JSON column IS NULL in database
+Prisma.JsonNull   // JSON column contains literal null value
+Prisma.AnyNull    // matches either DbNull or JsonNull
+
+// Decimal type
+Prisma.Decimal    // arbitrary-precision decimal (from @prisma/client-runtime-utils)
+
+// Type-safe query args reuse
+Prisma.validator<Prisma.UserFindManyArgs>()({ where: { role: "admin" } })
+
+// Payload type helper (infer result type from query args)
+type UserWithPosts = Prisma.UserGetPayload<{ include: { posts: true } }>
+
+// Omit feature (v5.13+) — exclude fields from default selection
+// prisma.user.findMany({ omit: { password: true } })
+// Global omit in client: new PrismaClient({ omit: { user: { password: true } } })
 ```

@@ -19,7 +19,7 @@ Grammar_Lock: "@root/hashes/grammar/express.hash.md"
 ```ts
 import express from "express"
 import type { Application, Request, Response, NextFunction, Router, RequestHandler, ErrorRequestHandler, CookieOptions } from "express"
-import type { ParamsDictionary, Query, Send, PathParams, RouteParameters, IRouter, IRoute, IRouterMatcher, IRouterHandler, ILayer, MediaType } from "express-serve-static-core"
+import type { ParamsDictionary, ParamsFlatDictionary, Params, Query, Send, PathParams, RouteParameters, IRouter, IRoute, IRouterMatcher, IRouterHandler, ILayer, MediaType, ByteRange, RequestHandlerParams, Errback, SendFileOptions, DownloadOptions, Locals, RequestRanges } from "express-serve-static-core"
 ```
 
 ## [Core_Primitives]
@@ -136,6 +136,41 @@ interface CookieOptions {
 // Route parameter extraction (template literal types, index.d.ts L96-122)
 type RouteParameters<Route extends string | RegExp>  // Extracts :params from route strings
 // e.g., RouteParameters<"/user/:id/posts/:postId"> = { id: string; postId: string }
+// Wildcard: RouteParameters<"/files/*filepath"> = { filepath: string[] }
+// Optional group: RouteParameters<"/user/:id{/post/:postId}"> = { id: string } & Partial<{ postId: string }>
+
+// PathParams (index.d.ts L83)
+type PathParams = string | RegExp | Array<string | RegExp>
+
+// RequestHandlerParams — union of handler types for middleware chaining
+type RequestHandlerParams<P, ResBody, ReqBody, ReqQuery, LocalsObj> =
+  | RequestHandler<P, ResBody, ReqBody, ReqQuery, LocalsObj>
+  | ErrorRequestHandler<P, ResBody, ReqBody, ReqQuery, LocalsObj>
+  | Array<RequestHandler<P> | ErrorRequestHandler<P>>
+
+// Module augmentation — extend Express interfaces globally
+declare global {
+  namespace Express {
+    interface Request {}     // extend req
+    interface Response {}    // extend res
+    interface Locals {}      // extend res.locals
+    interface Application {} // extend app
+  }
+}
+interface Locals extends Express.Locals {}  // merged with res.locals
+
+// Send type alias (index.d.ts L678)
+type Send<ResBody = any, T = Response<ResBody>> = (body?: ResBody) => T
+
+// MediaType (index.d.ts L671-676)
+interface MediaType { value: string; quality: number; type: string; subtype: string }
+
+// ByteRange (index.d.ts L382-385)
+interface ByteRange { start: number; end: number }
+
+// SendFileOptions / DownloadOptions (index.d.ts L680-688)
+interface SendFileOptions extends SendOptions { headers?: Record<string, unknown> }
+interface DownloadOptions extends SendOptions { headers?: Record<string, unknown> }
 ```
 
 ## [Architectural_Laws]
@@ -204,10 +239,76 @@ app.set("views", "./views")
 app.set("env", "production" | "development")
 app.set("etag", boolean | "weak" | "strong" | Function)
 app.set("query parser", "simple" | "extended" | Function)
+app.set("subdomain offset", number)  // default: 2
+app.set("case sensitive routing", boolean)
+app.set("strict routing", boolean)
+app.set("json escape", boolean)
+app.set("json replacer", Function)
+app.set("json spaces", number)
+app.get("setting"): any  // retrieves setting value
+app.enable("setting"): Application
+app.disable("setting"): Application
+app.enabled("setting"): boolean
+app.disabled("setting"): boolean
+app.locals: Record<string, any>  // app-level locals, persist for app lifetime
 
-// HTTP methods array
+// Application lifecycle
+app.listen(port: number, callback?: () => void): http.Server
+app.listen(port: number, host: string, callback?: () => void): http.Server
+app.mountpath: string | string[]  // sub-app mount path(s)
+app.on("mount", (parent: Application) => void)  // emitted when sub-app mounted
+app.path(): string  // canonical path of app
+
+// Extended HTTP methods on IRouter (index.d.ts L272-292)
 router.checkout   router.copy   router.lock   router.merge   router.mkactivity
 router.mkcol   router.move   router["m-search"]   router.notify   router.propfind
 router.proppatch   router.purge   router.report   router.search   router.subscribe
 router.trace   router.unlock   router.unsubscribe   router.link   router.unlink
+```
+
+## [Tactical_Patterns]
+```ts
+// Type-safe route params via template literal inference
+app.get('/users/:userId/posts/:postId', (req, res) => {
+  req.params.userId   // string — auto-inferred from route
+  req.params.postId   // string
+})
+
+// Typed request body with generics
+app.post<{ id: string }, { success: boolean }, { name: string }>('/users/:id',
+  express.json(),
+  (req, res) => {
+    req.body.name    // string
+    req.params.id    // string
+    res.json({ success: true })  // { success: boolean }
+  }
+)
+
+// Module augmentation for custom properties
+declare global { namespace Express { interface Request { user?: User } } }
+app.use((req, res, next) => { req.user = authenticateUser(req); next() })
+
+// Error middleware (must have 4 params)
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  res.status(500).json({ error: err.message })
+})
+
+// Route chaining
+app.route('/users/:id')
+  .get((req, res) => res.json(getUser(req.params.id)))
+  .put((req, res) => res.json(updateUser(req.params.id, req.body)))
+  .delete((req, res) => res.sendStatus(204))
+
+// Content negotiation via format()
+res.format({
+  'text/plain': () => res.send('hello'),
+  'text/html': () => res.send('<b>hello</b>'),
+  'application/json': () => res.json({ message: 'hello' }),
+  default: () => res.status(406).send('Not Acceptable')
+})
+
+// Stack introspection
+router.stack.forEach((layer: ILayer) => {
+  console.log(layer.name, layer.path, layer.method, layer.regexp)
+})
 ```

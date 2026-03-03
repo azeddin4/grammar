@@ -153,6 +153,27 @@ pgTable("users", { ... }, (table) => [
   uniqueIndex("email_idx").on(table.email),
   index("name_idx").on(table.name),
 ])
+
+// Vector extension columns (pg-core/columns/vector_extension/)
+vector("embedding", { dimensions: 1536 })    // pgvector float32 vector
+halfvec("embedding", { dimensions: 1536 })   // pgvector float16 vector
+sparsevec("embedding", { dimensions: 1536 }) // pgvector sparse vector
+bit("flags", { dimensions: 8 })              // bit string
+
+// RLS Policies & Roles (pg-core/policies.d.ts, roles.d.ts)
+const adminRole = pgRole("admin")
+pgPolicy("users_select", { for: "select", to: adminRole, using: sql`auth.uid() = id` })
+
+// Generated columns (column-builder.d.ts)
+integer("total").generatedAlwaysAs(sql`price * quantity`)
+integer("id").generatedAlwaysAsIdentity({ startWith: 1, increment: 1 })
+integer("id").generatedByDefaultAsIdentity()
+
+// Custom column type (pg-core/columns/custom.d.ts)
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" })
+
+// Count shorthand
+const count = await db.$count(users, eq(users.role, "admin"))
 ```
 
 ## [Architectural_Laws]

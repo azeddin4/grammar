@@ -84,48 +84,97 @@ import { z } from "zod/v3"
 
 ## [Core_Primitives]
 ```ts
-// Schema factories (v4/classic/schemas.d.ts — 740+ lines)
+// Primitive schema factories (v4/classic/schemas.d.ts — 740+ lines)
 z.string()      z.number()      z.bigint()     z.boolean()
 z.date()        z.symbol()      z.undefined()  z.null()
 z.void()        z.any()         z.unknown()    z.never()
 z.nan()         z.literal(value)
 
+// Standalone string format schemas (v4 — first-class, not chained)
+z.email()       z.url()         z.uuid()       z.guid()
+z.jwt()         z.emoji()       z.nanoid()     z.cuid()       z.cuid2()
+z.ulid()        z.xid()         z.ksuid()      z.base64()     z.base64url()
+z.ipv4()        z.ipv6()        z.mac()        z.cidrv4()     z.cidrv6()
+z.e164()        z.hostname()    z.hex()        z.httpUrl()
+z.hash("sha256")                               // Hash format validator
+z.stringFormat("custom", fn | /regex/)         // Custom string format
+
+// Number format schemas (v4)
+z.int()         z.float32()     z.float64()    z.int32()      z.uint32()
+
+// BigInt format schemas (v4)
+z.int64()       z.uint64()
+
+// ISO temporal schemas (v4)
+z.iso.datetime()   z.iso.date()   z.iso.time()   z.iso.duration()
+
 // Composite schema types
-z.object({ key: z.string() })         // ZodObject
+z.object({ key: z.string() })         // ZodObject — strip mode default
+z.strictObject({ key: z.string() })   // ZodObject — strict mode (rejects unknown keys)
+z.looseObject({ key: z.string() })    // ZodObject — loose mode (passes unknown keys through)
 z.array(z.string())                    // ZodArray
 z.tuple([z.string(), z.number()])      // ZodTuple
 z.union([z.string(), z.number()])      // ZodUnion
+z.xor([schemaA, schemaB])              // ZodXor — exclusive union (exactly one must match)
 z.discriminatedUnion("type", [...])    // ZodDiscriminatedUnion
 z.intersection(schemaA, schemaB)       // ZodIntersection
 z.record(z.string(), z.number())       // ZodRecord
+z.partialRecord(z.string(), z.number())// ZodRecord — values may be undefined
+z.looseRecord(z.string(), z.number()) // ZodRecord — loose mode
 z.map(z.string(), z.number())          // ZodMap
 z.set(z.string())                      // ZodSet
 z.enum(["A", "B", "C"])               // ZodEnum
-z.nativeEnum(TsEnum)                   // ZodNativeEnum
+z.enum(TsEnum)                         // v4: merged nativeEnum into enum()
 z.promise(z.string())                  // ZodPromise
-z.function(args, returns)              // ZodFunction
+z.function({ input: [z.string()], output: z.number() })  // ZodFunction (v4 API)
 z.lazy(() => schema)                   // ZodLazy (recursive)
-z.templateLiteral([z.literal("prefix-"), z.string()]) // ZodTemplateLiteral (v4)
+z.templateLiteral([z.literal("prefix-"), z.string()]) // ZodTemplateLiteral
+z.file()                               // ZodFile — File/Blob validation with .min() .max() .mime()
+z.json()                               // ZodJSONSchema — recursive JSON type validator
+z.custom<T>(fn)                        // ZodCustom — custom schema type
+z.preprocess(fn, schema)               // ZodPipe<ZodTransform, schema>
+z.stringbool()                         // ZodCodec — coerce "true"/"false" strings to boolean
+
+// Bidirectional codec (v4) — encode/decode with separate schemas
+z.codec(inputSchema, outputSchema, { decode: fn, encode: fn })  // ZodCodec
 
 // Type inference (THE core pattern)
 type User = z.infer<typeof UserSchema>
 type UserInput = z.input<typeof UserSchema>   // before transforms
 type UserOutput = z.output<typeof UserSchema>  // after transforms
 
-// String checks (v4/classic/checks.d.ts, v4/core/regexes.d.ts)
-z.string().min(1).max(255).email().url().uuid().cuid().cuid2()
-  .ulid().ip().cidr().regex(/pattern/).trim().toLowerCase().toUpperCase()
-  .startsWith("prefix").endsWith("suffix").includes("substr")
-  .datetime().date().time().duration().base64().jwt()
-  .nanoid().emoji().iso()
+// String checks (chainable on z.string())
+.min(1).max(255).length(10).nonempty().regex(/pattern/)
+.trim().toLowerCase().toUpperCase().normalize().slugify()
+.startsWith("prefix").endsWith("suffix").includes("substr")
+.lowercase().uppercase()   // validation checks (don't transform)
 
-// Number checks
-z.number().min(0).max(100).int().positive().negative()
-  .nonnegative().nonpositive().finite().safe().multipleOf(5)
+// Number checks (chainable)
+.min(0).max(100).gt(0).lt(100).gte(0).lte(100)
+.int().positive().negative().nonnegative().nonpositive().multipleOf(5)
+
+// BigInt checks (chainable)
+.min(0n).max(100n).gt(0n).lt(100n).positive().negative().multipleOf(2n)
+
+// Collection checks (chainable on array, set, map)
+.min(1).max(10).nonempty().length(5)   // Array
+.min(1).max(10).nonempty().size(5)     // Set, Map
+
+// File checks (chainable on z.file())
+.min(1024).max(5_000_000).mime(["image/png", "image/jpeg"])
 
 // Coercion (v4/classic/coerce.d.ts)
 z.coerce.string()   z.coerce.number()   z.coerce.boolean()
 z.coerce.bigint()   z.coerce.date()
+
+// Standalone check factories (v4 — composable with .check())
+z.lt(value)    z.lte(value)    z.gt(value)     z.gte(value)
+z.positive()   z.negative()    z.nonpositive() z.nonnegative()
+z.multipleOf(n)  z.minLength(n)  z.maxLength(n)  z.length(n)
+z.minSize(n)   z.maxSize(n)    z.size(n)
+z.regex(/pattern/)  z.includes(str)  z.startsWith(str)  z.endsWith(str)
+z.lowercase()  z.uppercase()   z.trim()  z.normalize()  z.slugify()
+z.overwrite(fn)  z.mime(types)  z.property(key, schema)
 ```
 
 ## [Architectural_Laws]
@@ -162,45 +211,78 @@ schema.parse(data: unknown): T                          // throws ZodError
 schema.safeParse(data: unknown): SafeParseResult<T>     // never throws
 schema.parseAsync(data: unknown): Promise<T>
 schema.safeParseAsync(data: unknown): Promise<SafeParseResult<T>>
+schema.spa(data: unknown): Promise<SafeParseResult<T>>  // alias for safeParseAsync
+
+// Bidirectional parsing (v4 — for codecs and transforms)
+schema.encode(data: Output): Input       // reverse transform (output → input)
+schema.decode(data: Input): Output       // forward transform (input → output)
+schema.encodeAsync(data: Output): Promise<Input>
+schema.decodeAsync(data: Input): Promise<Output>
+schema.safeEncode(data: Output): SafeParseResult<Input>
+schema.safeDecode(data: Input): SafeParseResult<Output>
 
 // Modifiers
-schema.optional(): ZodOptional<T>        // T | undefined
-schema.nullable(): ZodNullable<T>        // T | null
-schema.nullish(): ZodNullable<ZodOptional<T>>  // T | null | undefined
-schema.default(value): ZodDefault<T>
-schema.catch(value): ZodCatch<T>         // fallback on error
+schema.optional(): ZodOptional<T>          // T | undefined
+schema.exactOptional(): ZodExactOptional<T>// key may be missing, but not undefined
+schema.nonoptional(): ZodNonOptional<T>    // inverse of optional
+schema.nullable(): ZodNullable<T>          // T | null
+schema.nullish(): ZodOptional<ZodNullable<T>>  // T | null | undefined
+schema.default(value): ZodDefault<T>       // provide default for undefined
+schema.prefault(value): ZodPrefault<T>     // provide default for INPUT before parsing
+schema.catch(value): ZodCatch<T>           // fallback on error
 schema.readonly(): ZodReadonly<T>
-schema.brand<B>(): ZodBranded<T, B>      // nominal typing
-schema.pipe(otherSchema): ZodPipeline    // chain schemas
+schema.brand<B>(): ZodBranded<T, B>        // nominal typing
+schema.pipe(otherSchema): ZodPipe          // chain schemas
+schema.or(otherSchema): ZodUnion           // shorthand union
+schema.and(otherSchema): ZodIntersection   // shorthand intersection
+schema.array(): ZodArray<T>                // shorthand array
+schema.transform(fn): ZodPipe              // value transformation
+schema.check(...checks): this              // add checks (composable)
+schema.with(...checks): this               // alias for .check()
+schema.clone(): this                       // clone schema instance
+schema.apply(fn): T                        // apply function to schema, return result
+schema.describe(description): this         // register description in globalRegistry
+schema.meta(): GlobalMeta | undefined      // get metadata from globalRegistry
+schema.meta(data): this                    // set metadata in globalRegistry
+schema.register(registry, meta): this      // register in custom registry
+schema.unwrap(): T                         // unwrap wrapper types (optional, nullable, default, etc.)
 
 // Object methods
-z.object({}).partial()                   // all optional
-z.object({}).required()                  // all required
-z.object({}).pick({ key: true })         // subset
-z.object({}).omit({ key: true })         // exclude
-z.object({}).extend({ newKey: z.number() })
-z.object({}).merge(otherObjectSchema)
-z.object({}).keyof()                     // ZodEnum from keys
-z.object({}).strict()                    // no unrecognized keys (error)
-z.object({}).strip()                     // strip unknown keys (default)
-z.object({}).passthrough()               // pass unknown keys through
+obj.partial()                    // all optional (selective: .partial({ key: true }))
+obj.required()                   // all required (selective: .required({ key: true }))
+obj.pick({ key: true })          // subset
+obj.omit({ key: true })          // exclude
+obj.extend(shape)                // add new fields
+obj.safeExtend(shape)            // type-safe extend (prevents narrowing errors)
+obj.merge(otherObj)              // @deprecated: use .extend(other.shape)
+obj.keyof()                      // ZodEnum from keys
+obj.strict()                     // reject unrecognized keys
+obj.strip()                      // strip unknown keys (default)
+obj.loose()                      // pass unknown keys through (replaces .passthrough())
+obj.catchall(schema)             // validate unrecognized keys with schema
 
-// Transforms & Refinements
-schema.transform(val => transformed)
-schema.refine(val => boolean, { message })
-schema.superRefine((val, ctx) => { ctx.addIssue(...) })
+// Enum methods
+enum.extract(["A", "B"])         // subset enum
+enum.exclude(["C"])              // exclude values from enum
 
-// JSON Schema (v4/core/to-json-schema.d.ts, v4/core/json-schema.d.ts)
-z.toJSONSchema(schema): JSONSchema       // convert to JSON Schema
-z.fromJSONSchema(jsonSchema): ZodType    // convert from JSON Schema (v4/classic/from-json-schema.d.ts)
+// Refinements
+schema.refine(val => boolean, { message })     // type-narrowing refinement
+schema.superRefine((val, ctx) => { ctx.addIssue(...) })  // full control
+schema.overwrite(fn)             // in-place value rewrite (no type change)
+
+// JSON Schema (v4/core/to-json-schema.d.ts)
+z.toJSONSchema(schema): JSONSchema
+z.fromJSONSchema(jsonSchema): ZodType
+schema.toJSONSchema(): JSONSchemaPayload  // instance method
 
 // Registries (v4/core/registries.d.ts)
 const registry = z.registry<z.ZodType, { description: string }>()
 registry.register(schema, metadata)
 registry.get(schema)
+z.globalRegistry                          // built-in global registry for .describe() / .meta()
 
 // Standard Schema (v4/core/standard-schema.d.ts)
-// Zod v4 implements the Standard Schema interface for interop
+// Zod v4 implements the Standard Schema interface (~standard) for cross-lib interop
 ```
 
 ## [Error_Modeling]

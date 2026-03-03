@@ -40,11 +40,11 @@ Grammar_Lock: "@root/hashes/grammar/next.hash.md"
 // Navigation (client)
 import { useRouter, usePathname, useSearchParams, useParams, useSelectedLayoutSegment, useSelectedLayoutSegments, redirect, permanentRedirect, notFound } from "next/navigation"
 // Server
-import { NextRequest, NextResponse, NextMiddleware, userAgent } from "next/server"
+import { NextRequest, NextResponse, NextFetchEvent, NextMiddleware, MiddlewareConfig, userAgent, URLPattern, after, connection } from "next/server"
 // Headers (server only — async in Next 15+)
 import { cookies, headers, draftMode } from "next/headers"
 // Cache
-import { unstable_cache, revalidatePath, revalidateTag, unstable_noStore } from "next/cache"
+import { unstable_cache, revalidatePath, revalidateTag, updateTag, refresh, cacheLife, cacheTag, unstable_noStore } from "next/cache"
 // Components
 import Image from "next/image"
 import Link from "next/link"
@@ -86,6 +86,10 @@ export const fetchCache = "auto" | "only-cache" | "force-cache" | "default-cache
 // Server Actions
 "use server"
 async function createPost(formData: FormData): Promise<void>
+
+// "use cache" directive (Next.js 15+)
+"use cache"
+async function getCachedData() { "use cache"; cacheLife("hours"); cacheTag("data"); return fetch(...) }
 
 // Page props (root-params.d.ts)
 type PageProps = { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[]>> }
@@ -166,7 +170,19 @@ draftMode(): Promise<{ isEnabled: boolean; enable(); disable() }>
 // Cache (cache.d.ts)
 revalidatePath(path: string, type?: "page" | "layout"): void
 revalidateTag(tag: string): void
+updateTag(tag: string): void                 // Next 16+
+refresh(): void                               // client cache refresh
 unstable_cache<T>(fn: (...args) => Promise<T>, keyParts?: string[], options?: { revalidate?: number; tags?: string[] }): (...args) => Promise<T>
+
+// Cache directives ("use cache" — Next 15+)
+cacheLife(profile: "default" | "seconds" | "minutes" | "hours" | "days" | "weeks" | "max"): void
+cacheLife(profile: { stale?: number; revalidate?: number; expire?: number }): void
+cacheTag(...tags: string[]): void             // associate cache entry with tags
+
+// Server utilities (server.d.ts)
+after(callback: () => void | Promise<void>): void   // Run after response (background tasks)
+connection(): Promise<void>                          // Wait for connection (opt out of prerendering)
+URLPattern                                           // URL pattern matching (Edge Runtime)
 
 // Image (image.d.ts)
 <Image src={string | StaticImport} alt={string} width={number} height={number} fill? priority? quality? placeholder? blurDataURL? sizes? loading? />
@@ -188,5 +204,24 @@ new ImageResponse(element: JSX.Element, options?: { width, height, fonts, emoji,
 
 // Middleware (server.d.ts)
 export function middleware(request: NextRequest): NextResponse | Response | void
-export const config = { matcher: ["/api/:path*", "/dashboard/:path*"] }
+export const config: MiddlewareConfig = { matcher: ["/api/:path*", "/dashboard/:path*"] }
 ```
+
+## [Tactical_Patterns]
+### "use cache" Pattern (Next.js 15+)
+- Use `"use cache"` directive at file or function level for server-side caching.
+- Use `cacheLife("hours")` to define cache lifetime profiles.
+- Use `cacheTag("tag")` to tag entries for targeted `revalidateTag()` invalidation.
+
+### Server Actions Pattern
+- Create in separate `"use server"` file. Call from client via `<form action={serverAction}>` or `useActionState()`.
+- Always validate input with Zod. Return `{ error }` pattern for client feedback.
+
+### Streaming Pattern
+- Wrap async components in `<Suspense fallback={<Loading/>}>` for streaming.
+- Use `loading.tsx` for route-level loading states.
+- Use `after()` for post-response background work (analytics, logging).
+
+### Parallel & Intercepting Routes
+- `@slot` named slots for parallel rendering. `(.)folder` for intercepting routes.
+- Use `default.tsx` for unmatched parallel route fallbacks.
